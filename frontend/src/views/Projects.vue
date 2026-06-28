@@ -25,10 +25,24 @@
     </el-table>
   </el-card>
 </template>
+
 <script setup>
 import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getProjects } from '../api'
-const list = ref([]); const loading = ref(true)
-const tag = s => s==='进行中'?'primary':s==='已完成'?'success':'info'
-onMounted(async () => { list.value = (await getProjects()).data; loading.value = false })
+
+const list = ref([])
+const loading = ref(true)
+const tag = s => s === '进行中' ? 'primary' : s === '已完成' ? 'success' : 'info'
+
+onMounted(async () => {
+  try {
+    const res = await getProjects()
+    list.value = res.data
+  } catch (e) {
+    ElMessage.error('项目列表加载失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+})
 </script>

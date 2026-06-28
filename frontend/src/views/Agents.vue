@@ -35,23 +35,54 @@
       </el-form>
       <template #footer>
         <el-button @click="dialog=false">取消</el-button>
-        <el-button type="primary" @click="submit">提交</el-button>
+        <el-button type="primary" @click="submit" :loading="submitting">提交</el-button>
       </template>
     </el-dialog>
   </el-card>
 </template>
+
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAgents, createAgent } from '../api'
-const list = ref([]); const loading = ref(true); const dialog = ref(false)
+
+const list = ref([])
+const loading = ref(true)
+const dialog = ref(false)
+const submitting = ref(false)
 const form = reactive({ name: '', platform: 'platform_a', owner: '' })
-const load = async () => { list.value = (await getAgents()).data; loading.value = false }
-const submit = async () => {
-  const r = await createAgent(form)
-  ElMessage.success(`已通过适配层创建：${r.data.agent_id}`)
-  dialog.value = false; load()
+
+const load = async () => {
+  try {
+    const res = await getAgents()
+    list.value = res.data
+  } catch (e) {
+    ElMessage.error('Agent 列表加载失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
 }
+
+const submit = async () => {
+  if (!form.name || !form.owner) {
+    ElMessage.warning('请填写名称和负责人')
+    return
+  }
+  submitting.value = true
+  try {
+    const r = await createAgent(form)
+    ElMessage.success(`已通过适配层创建：${r.data.agent_id}`)
+    dialog.value = false
+    form.name = ''
+    form.owner = ''
+    await load()
+  } catch (e) {
+    ElMessage.error('创建 Agent 失败：' + (e.message || '未知错误'))
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(load)
 </script>

@@ -38,14 +38,37 @@
     </el-col>
   </el-row>
 </template>
+
 <script setup>
 import { ref, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
 import { getRuns, getRun } from '../api'
-const list = ref([]); const loading = ref(true); const detail = ref(null)
-const typeColor = t => ({input:'primary', tool:'warning', reason:'info', output:'success'}[t] || 'info')
-const select = async row => { if (row) detail.value = (await getRun(row.id)).data }
+
+const list = ref([])
+const loading = ref(true)
+const detail = ref(null)
+
+const typeColor = t => ({ input: 'primary', tool: 'warning', reason: 'info', output: 'success' }[t] || 'info')
+
+const select = async row => {
+  if (!row) { detail.value = null; return }
+  try {
+    detail.value = (await getRun(row.id)).data
+  } catch (e) {
+    ElMessage.error('运行详情加载失败：' + (e.message || '未知错误'))
+    detail.value = null
+  }
+}
+
 onMounted(async () => {
-  list.value = (await getRuns()).data; loading.value = false
-  if (list.value.length) select(list.value[0])
+  try {
+    const res = await getRuns()
+    list.value = res.data
+    if (list.value.length) await select(list.value[0])
+  } catch (e) {
+    ElMessage.error('运行记录加载失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
 })
 </script>

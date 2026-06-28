@@ -44,14 +44,36 @@
     </el-row>
   </div>
 </template>
+
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getGovernance, toggleBreaker } from '../api'
-const g = ref(null); const loading = ref(true); const breaker = ref(false)
-const toggle = async v => { await toggleBreaker(v); ElMessage.warning(`熔断已${v?'开启':'关闭'}`) }
+
+const g = ref(null)
+const loading = ref(true)
+const breaker = ref(false)
+
+const toggle = async v => {
+  try {
+    await toggleBreaker(v)
+    ElMessage.warning(`熔断已${v ? '开启' : '关闭'}`)
+  } catch (e) {
+    // 回滚 switch 状态
+    breaker.value = !v
+    ElMessage.error('熔断切换失败：' + (e.message || '未知错误'))
+  }
+}
+
 onMounted(async () => {
-  g.value = (await getGovernance()).data
-  breaker.value = g.value.circuit_breaker; loading.value = false
+  try {
+    const res = await getGovernance()
+    g.value = res.data
+    breaker.value = g.value.circuit_breaker
+  } catch (e) {
+    ElMessage.error('治理数据加载失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
 })
 </script>
