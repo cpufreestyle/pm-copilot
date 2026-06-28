@@ -1,8 +1,10 @@
 """
 小浣熊 PM Copilot - 后端 Mock 服务
 """
+import os
 import threading
-from fastapi import FastAPI, HTTPException
+from functools import wraps
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -10,37 +12,60 @@ from typing import Optional
 from mock_data import PROJECTS, AGENTS, RUNS, AUDITS, GOVERNANCE, DASHBOARD
 from adapters import ADAPTERS
 
-app = FastAPI(title="PM Copilot API", version="1.0.0",
-              description="小浣熊 PM Copilot 后端接口")
+# ── 环境变量配置 ────────────────────────────────────────────────────────
+from dotenv import load_dotenv
+load_dotenv()
 
-# ── CORS：仅允许已知的开发/生产域名 ──────────────────────────────────────
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",   # Vite dev server
+HOST       = os.getenv("HOST", "0.0.0.0")
+PORT       = int(os.getenv("PORT", "8000"))
+DEBUG      = os.getenv("DEBUG", "false").lower() == "true"
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()] or [
+    "http://localhost:5173",
     "http://localhost:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:3000",
 ]
+
+# ── FastAPI 实例 ────────────────────────────────────────────────────────
+app = FastAPI(
+    title="PM Copilot API",
+    version="1.1.0",
+    description="小浣熊 PM Copilot 后端接口",
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── 全局状态锁（防止并发写入冲突）─────────────────────────────────────────
+# ── 全局状态锁 ─────────────────────────────────────────────────────────
 _state_lock = threading.Lock()
 
 
-# ── 通用响应 ──────────────────────────────────────────────────────────────
+# ── 通用响应 ────────────────────────────────────────────────────────────
 def ok(data=None, msg="ok"):
     return {"code": 0, "msg": msg, "data": data}
 
 
-# ── 健康检查 ──────────────────────────────────────────────────────────────
+def paginate(data: list, page: int = 1, page_size: int = 20) -> dict:
+    """分页辅助函数"""
+    total = len(data)
+    start = (page - 1) * page_size
+    end   = start + page_size
+    return {
+        "items":   data[start:end],
+        "total":   total,
+        "page":    page,
+        "page_size": page_size,
+        "pages":   (total + page_size - 1) // page_size,
+    }
+
+
+# ── 健康检查 ────────────────────────────────────────────────────────────
 @app.get("/health", summary="健康检查")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.1.0", "debug": DEBUG}
 
 
 # ── 总览 ────────────────────────────────────────────────────────────────
@@ -50,12 +75,16 @@ def get_dashboard():
 
 
 # ── 项目 ────────────────────────────────────────────────────────────────
-@app.get("/api/projects", summary="项目列表")
-def list_projects(status: Optional[str] = None):
+@app.get("/api/projects", summary="项目列表（分页）")
+def list_projects(
+    status:    Optional[str] = None,
+    page:      int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+):
     data = PROJECTS
     if status:
         data = [p for p in data if p["status"] == status]
-    return ok(data)
+    return ok(paginate(data, page, page_size))
 
 
 @app.get("/api/projects/{pid}", summary="项目详情")
@@ -69,12 +98,17 @@ def get_project(pid: str):
 
 
 # ── Agent ───────────────────────────────────────────────────────────────
-@app.get("/api/agents", summary="Agent 列表")
-def list_agents(platform: Optional[str] = None, status: Optional[str] = None):
+@app.get("/api/agents", summary="Agent 列表（分页）")
+def list_agents(
+    platform:  Optional[str] = None,
+    agent_status: Optional[str] = Query(None, alias="status", description="在线状态"),
+    page:      int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
     data = AGENTS
-    if platform: data = [a for a in data if a["platform"] == platform]
-    if status:   data = [a for a in data if a["status"] == status]
-    return ok(data)
+    if platform:     data = [a for a in data if a["platform"] == platform]
+    if agent_status: data = [a for a in data if a["status"] == agent_status]
+    return ok(paginate(data, page, page_size))
 
 
 class AgentCreate(BaseModel):
@@ -92,9 +126,12 @@ def create_agent(req: AgentCreate):
 
 
 # ── 运行 ────────────────────────────────────────────────────────────────
-@app.get("/api/runs", summary="运行记录列表")
-def list_runs():
-    return ok(RUNS)
+@app.get("/api/runs", summary="运行记录列表（分页）")
+def list_runs(
+    page:      int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
+    return ok(paginate(RUNS, page, page_size))
 
 
 @app.get("/api/runs/{rid}", summary="运行详情（含 trace）")
@@ -122,18 +159,22 @@ def governance():
 
 @app.post("/api/governance/circuit-breaker", summary="切换熔断开关")
 def toggle_circuit_breaker(enable: bool):
-    # 线程安全写入全局状态
     with _state_lock:
         GOVERNANCE["circuit_breaker"] = enable
-    return ok(GOVERNANCE, msg=f"熔断已{'开启' if enable else '关闭'}"})
+    return ok(GOVERNANCE, msg=f"熔断已{'开启' if enable else '关闭'}")
 
 
 # ── 审计 ────────────────────────────────────────────────────────────────
-@app.get("/api/audits", summary="审计日志")
-def list_audits(user: Optional[str] = None):
+@app.get("/api/audits", summary="审计日志（分页）")
+def list_audits(
+    user:      Optional[str] = None,
+    page:      int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+):
     data = AUDITS
-    if user: data = [a for a in data if a["user"] == user]
-    return ok(data)
+    if user:
+        data = [a for a in data if a["user"] == user]
+    return ok(paginate(data, page, page_size))
 
 
 # ── 适配层 ─────────────────────────────────────────────────────────────
@@ -144,4 +185,4 @@ def list_adapters():
 
 @app.get("/", summary="根路径")
 def root():
-    return {"name": "PM Copilot API", "docs": "/docs"}
+    return {"name": "PM Copilot API", "docs": "/docs", "health": "/health"}

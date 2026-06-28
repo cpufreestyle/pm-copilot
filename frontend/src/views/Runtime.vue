@@ -2,7 +2,12 @@
   <el-row :gutter="20">
     <el-col :span="10">
       <el-card v-loading="loading">
-        <template #header>▶ 运行记录</template>
+        <template #header>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span>▶ 运行记录</span>
+            <el-tag type="info" size="small">共 {{ total }} 条</el-tag>
+          </div>
+        </template>
         <el-table :data="list" highlight-current-row @current-change="select" size="small">
           <el-table-column prop="id" label="任务 ID" />
           <el-table-column prop="agent" label="Agent" width="120" />
@@ -12,6 +17,13 @@
             </template>
           </el-table-column>
         </el-table>
+        <el-pagination
+          style="margin-top:12px;justify-content:center;"
+          small background
+          layout="prev, pager, next"
+          :total="total" :page-size="query.pageSize" :current-page="query.page"
+          @current-change="p => { query.page=p; load() }"
+        />
       </el-card>
     </el-col>
     <el-col :span="14">
@@ -40,15 +52,32 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRuns, getRun } from '../api'
 
 const list = ref([])
+const total = ref(0)
 const loading = ref(true)
 const detail = ref(null)
+const query = reactive({ page: 1, pageSize: 20 })
 
 const typeColor = t => ({ input: 'primary', tool: 'warning', reason: 'info', output: 'success' }[t] || 'info')
+
+const load = async () => {
+  loading.value = true
+  try {
+    const res = await getRuns(query)
+    list.value  = res.items
+    total.value = res.total
+    if (list.value.length) await select(list.value[0])
+    else detail.value = null
+  } catch (e) {
+    ElMessage.error('运行记录加载失败：' + (e.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
 
 const select = async row => {
   if (!row) { detail.value = null; return }
@@ -60,15 +89,5 @@ const select = async row => {
   }
 }
 
-onMounted(async () => {
-  try {
-    const res = await getRuns()
-    list.value = res.data
-    if (list.value.length) await select(list.value[0])
-  } catch (e) {
-    ElMessage.error('运行记录加载失败：' + (e.message || '未知错误'))
-  } finally {
-    loading.value = false
-  }
-})
+onMounted(load)
 </script>
