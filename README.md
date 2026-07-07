@@ -69,7 +69,17 @@ class BaseAdapter(ABC):
     def cost(run_id) -> dict           # 导出成本
 ```
 
-已内置示例：`platform_a.py`、`platform_b.py`。
+### 已接入适配器
+
+| 适配器 | platform_name | 管理项目 | 说明 |
+|--------|--------------|----------|------|
+| PlatformAAdapter | `platform_a` | 示例平台 A | 演示用适配器 |
+| PlatformBAdapter | `platform_b` | 示例平台 B | 演示用适配器 |
+| BrowserUseAdapter | `browser_use` | browser-use | 浏览器自动化 Agent，管理任务执行、步骤日志、LLM 成本 |
+| StockDashboardAdapter | `stock_dashboard` | stock-dashboard | 股票看板 API 服务器，健康检查、数据状态 |
+| SanguoshaAdapter | `sanguosha_mobile` | sanguosha-mobile | 三国杀助手 PWA，构建部署、状态查询 |
+| BlenderAdapter | `blender_explode` | blender-auto-3d-explode | Blender 3D 拆解系统，模型处理、渲染状态 |
+| WinOptimizerAdapter | `win_optimizer` | win-optimizer | Windows 优化工具，脚本执行、结果查询 |
 
 ---
 
@@ -100,7 +110,17 @@ pm-copilot/
 ├── backend/
 │   ├── Dockerfile       # 后端 Python 镜像
 │   ├── .env.example     # 环境变量模板
-│   └── adapters/        # 适配层抽象
+│   ├── adapters/        # 适配层
+│   │   ├── base.py              # BaseAdapter 抽象接口
+│   │   ├── __init__.py          # 适配器注册表
+│   │   ├── platform_a.py        # 示例适配器 A
+│   │   ├── platform_b.py        # 示例适配器 B
+│   │   ├── browser_use_adapter.py    # browser-use 适配器
+│   │   ├── stock_dashboard_adapter.py # stock-dashboard 适配器
+│   │   ├── sanguosha_adapter.py      # sanguosha-mobile 适配器
+│   │   ├── blender_adapter.py        # blender-auto-3d-explode 适配器
+│   │   └── win_optimizer_adapter.py  # win-optimizer 适配器
+│   └── mock_data/       # Mock 数据
 └── docs/                # 架构图、线框图、效果图
 ```
 
